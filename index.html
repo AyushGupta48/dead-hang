@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<title>Dead Hang Tracker</title>
+
+<!-- PWA / iOS home screen -->
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="Dead Hang"/>
+<meta name="theme-color" content="#0d0d0d"/>
+
+<!-- Inline manifest -->
+<link rel="manifest" href="data:application/json,%7B%22name%22%3A%22Dead%20Hang%20Tracker%22%2C%22short_name%22%3A%22Dead%20Hang%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%230d0d0d%22%2C%22theme_color%22%3A%22%230d0d0d%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22data%3Aimage%2Fsvg%2Bxml%2C%253Csvg%2520xmlns%3D%2527http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%2527%2520viewBox%3D%25270%25200%252064%252064%2527%253E%253Crect%2520width%3D%252764%2527%2520height%3D%252764%2527%2520rx%3D%252714%2527%2520fill%3D%25270d0d0d%2527%2F%253E%253Ctext%2520y%3D%252746%2527%2520x%3D%252732%2527%2520text-anchor%3D%2527middle%2527%2520font-size%3D%252736%2527%253E%25F0%259F%25A4%259C%253C%2FText%253E%253C%2Fsvg%253E%22%2C%22sizes%22%3A%22192x192%22%2C%22type%22%3A%22image%2Fsvg%2Bxml%22%7D%5D%7D"/>
+
+<!-- Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+
+<style>
+:root {
+  --bg:       #0d0d0d;
+  --bg2:      #161616;
+  --bg3:      #1f1f1f;
+  --border:   #2a2a2a;
+  --border2:  #333;
+  --text:     #f0f0f0;
+  --text2:    #888;
+  --text3:    #555;
+  --green:    #22c55e;
+  --green2:   #16a34a;
+  --green-bg: rgba(34,197,94,.08);
+  --amber:    #f59e0b;
+  --amber-bg: rgba(245,158,11,.08);
+  --red:      #ef4444;
+  --mono:     'DM Mono', monospace;
+  --sans:     'DM Sans', sans-serif;
+  --r:        10px;
+  --r2:       14px;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { background: var(--bg); }
+
+body {
+  font-family: var(--sans);
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100dvh;
+  padding-bottom: calc(1rem + var(--safe-bottom));
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Layout ── */
+.app {
+  max-width: 430px;
+  margin: 0 auto;
+  padding: 0 16px;
+}
+
+/* ── Header ── */
+.header {
+  padding: 56px 0 28px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+}
+.header-left h1 {
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -.03em;
+  color: var(--text);
+}
+.header-left p {
+  font-size: 13px;
+  color: var(--text3);
+  margin-top: 3px;
+  font-weight: 300;
+  letter-spacing: .02em;
+}
+.streak-pill {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--green-bg);
+  border: 1px solid rgba(34,197,94,.2);
+  border-radius: 99px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--green);
+  white-space: nowrap;
+}
+.streak-pill span { font-family: var(--mono); font-size: 15px; }
+
+/* ── Stat row ── */
+.stats-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.stat {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--r2);
+  padding: 14px 16px;
+}
+.stat-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  margin-bottom: 6px;
+}
+.stat-val {
+  font-family: var(--mono);
+  font-size: 24px;
+  font-weight: 500;
+  color: var(--text);
+  letter-spacing: -.02em;
+}
+.stat-val.green { color: var(--green); }
+.stat-val.amber { color: var(--amber); }
+.stat-sub {
+  font-size: 11px;
+  color: var(--text3);
+  margin-top: 3px;
+}
+
+/* ── Card ── */
+.card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--r2);
+  padding: 20px;
+  margin-bottom: 12px;
+}
+.card-title {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  margin-bottom: 16px;
+}
+
+/* ── Timer ── */
+.timer-wrap { text-align: center; padding: 10px 0; }
+.timer {
+  font-family: var(--mono);
+  font-size: 72px;
+  font-weight: 400;
+  color: var(--text);
+  letter-spacing: -.04em;
+  line-height: 1;
+  transition: color .3s;
+}
+.timer.running { color: var(--green); }
+.timer.pr { color: var(--amber); }
+
+.pr-msg {
+  font-size: 12px;
+  color: var(--amber);
+  margin-top: 6px;
+  height: 16px;
+  font-weight: 500;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+/* ── Goal bar ── */
+.goal-wrap { margin: 18px 0 20px; }
+.goal-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text3);
+  margin-bottom: 7px;
+}
+.goal-meta strong { color: var(--text2); font-weight: 500; }
+.bar-track {
+  height: 4px;
+  background: var(--bg3);
+  border-radius: 99px;
+  overflow: hidden;
+}
+.bar-fill {
+  height: 100%;
+  border-radius: 99px;
+  background: var(--green);
+  transition: width .4s ease;
+}
+.bar-fill.done { background: var(--green); }
+
+/* ── Buttons ── */
+.btn-row { display: flex; gap: 8px; }
+.btn {
+  flex: 1;
+  padding: 13px 10px;
+  border-radius: var(--r);
+  border: 1px solid var(--border2);
+  background: var(--bg3);
+  color: var(--text2);
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background .15s, color .15s, transform .1s, border-color .15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.btn:hover { background: #2a2a2a; color: var(--text); }
+.btn:active { transform: scale(.97); }
+.btn-primary {
+  background: var(--green);
+  border-color: var(--green);
+  color: #000;
+  font-weight: 600;
+}
+.btn-primary:hover { background: var(--green2); border-color: var(--green2); color: #000; }
+.btn-log {
+  background: var(--green-bg);
+  border-color: rgba(34,197,94,.3);
+  color: var(--green);
+}
+.btn-log:hover { background: rgba(34,197,94,.15); }
+
+/* ── Date row ── */
+.date-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.date-row label { font-size: 12px; color: var(--text3); white-space: nowrap; }
+input[type="date"] {
+  flex: 1;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 13px;
+  padding: 7px 10px;
+  outline: none;
+  color-scheme: dark;
+}
+input[type="date"]:focus { border-color: var(--border2); }
+
+/* ── Hangs list ── */
+.hangs-list { display: flex; flex-direction: column; gap: 6px; }
+.hang-item {
+  display: flex;
+  align-items: center;
+  background: var(--bg3);
+  border-radius: var(--r);
+  padding: 10px 12px;
+  gap: 10px;
+}
+.hang-num {
+  font-size: 12px;
+  color: var(--text3);
+  min-width: 54px;
+  font-weight: 500;
+}
+.hang-time {
+  font-family: var(--mono);
+  font-size: 14px;
+  color: var(--text);
+  flex: 1;
+}
+.pr-tag {
+  font-size: 10px;
+  font-weight: 600;
+  background: var(--amber-bg);
+  color: var(--amber);
+  border: 1px solid rgba(245,158,11,.25);
+  border-radius: 99px;
+  padding: 2px 8px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.del-btn {
+  background: none;
+  border: none;
+  color: var(--text3);
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  padding: 0 2px;
+  transition: color .15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.del-btn:hover { color: var(--red); }
+
+.empty {
+  text-align: center;
+  color: var(--text3);
+  font-size: 13px;
+  padding: 14px 0;
+}
+
+/* ── History ── */
+.hist-list { display: flex; flex-direction: column; gap: 8px; }
+.hist-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  background: var(--bg3);
+  border-radius: var(--r);
+}
+.hist-date { font-size: 14px; font-weight: 500; color: var(--text); }
+.hist-meta { font-size: 12px; color: var(--text3); margin-top: 2px; }
+.hist-right { text-align: right; }
+.hist-total {
+  font-family: var(--mono);
+  font-size: 15px;
+  color: var(--text);
+  font-weight: 500;
+}
+.hist-best { font-size: 11px; color: var(--text3); margin-top: 2px; }
+.goal-dot {
+  display: inline-block;
+  width: 7px; height: 7px;
+  background: var(--green);
+  border-radius: 50%;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+/* ── Animations ── */
+@keyframes fadeIn { from { opacity:0; transform: translateY(8px); } to { opacity:1; transform: none; } }
+.card { animation: fadeIn .3s ease both; }
+.card:nth-child(1) { animation-delay: .05s; }
+.card:nth-child(2) { animation-delay: .10s; }
+.card:nth-child(3) { animation-delay: .15s; }
+.card:nth-child(4) { animation-delay: .20s; }
+
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.6} }
+.timer.running { animation: pulse 2s ease infinite; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="header">
+    <div class="header-left">
+      <h1>Dead hang</h1>
+      <p>Break it up. Build it up.</p>
+    </div>
+    <div class="streak-pill">🔥 <span id="streak-val">0</span> day streak</div>
+  </div>
+
+  <div class="stats-row">
+    <div class="stat">
+      <div class="stat-label">Today's total</div>
+      <div class="stat-val green" id="stat-today">0:00</div>
+      <div class="stat-sub" id="stat-today-sub">of 3:00 goal</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Longest hang</div>
+      <div class="stat-val amber" id="stat-best">0:00</div>
+      <div class="stat-sub">single hang PR</div>
+    </div>
+  </div>
+
+  <div class="stats-row" style="margin-bottom:20px">
+    <div class="stat">
+      <div class="stat-label">Sessions logged</div>
+      <div class="stat-val" id="stat-sessions">0</div>
+      <div class="stat-sub">all time</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Hangs today</div>
+      <div class="stat-val" id="stat-hangs-today">0</div>
+      <div class="stat-sub">sets</div>
+    </div>
+  </div>
+
+  <!-- Timer card -->
+  <div class="card">
+    <div class="card-title">Timer</div>
+    <div class="timer-wrap">
+      <div class="timer" id="timer">0:00</div>
+      <div class="pr-msg" id="pr-msg"></div>
+    </div>
+    <div class="goal-wrap">
+      <div class="goal-meta">
+        <span>Daily total</span>
+        <strong id="goal-pct">0%</strong>
+      </div>
+      <div class="bar-track">
+        <div class="bar-fill" id="bar-fill" style="width:0%"></div>
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="btn-start" onclick="toggleTimer()">Start</button>
+      <button class="btn btn-log" id="btn-log" style="display:none" onclick="logHang()">Log hang</button>
+      <button class="btn" onclick="resetTimer()">Reset</button>
+    </div>
+  </div>
+
+  <!-- Today's hangs -->
+  <div class="card">
+    <div class="card-title">Hangs — add to today</div>
+    <div class="date-row">
+      <label>Date</label>
+      <input type="date" id="log-date"/>
+    </div>
+    <div id="hangs-list" class="hangs-list">
+      <div class="empty">Tap start to time your first hang</div>
+    </div>
+  </div>
+
+  <!-- History -->
+  <div class="card">
+    <div class="card-title">History</div>
+    <div id="hist-list" class="hist-list">
+      <div class="empty">No sessions yet — start hanging!</div>
+    </div>
+  </div>
+
+</div><!-- /app -->
+
+<script>
+const GOAL = 180; // 3 min in seconds
+let elapsed = 0, running = false, iv = null;
+let db = { sessions: [], best: 0 };
+
+/* ── Storage ── */
+function save() {
+  try { localStorage.setItem('dhang', JSON.stringify(db)); } catch(e){}
+}
+function load() {
+  try {
+    const raw = localStorage.getItem('dhang');
+    if (raw) db = JSON.parse(raw);
+  } catch(e){}
+}
+
+/* ── Helpers ── */
+function fmt(s) {
+  s = Math.round(s);
+  return Math.floor(s/60) + ':' + String(s%60).padStart(2,'0');
+}
+function today() {
+  return new Date().toISOString().slice(0,10);
+}
+function getDate() {
+  return document.getElementById('log-date').value || today();
+}
+function getSession(d) {
+  return db.sessions.find(s => s.date === d);
+}
+function totalForDate(d) {
+  const s = getSession(d);
+  return s ? s.hangs.reduce((a,b)=>a+b,0) : 0;
+}
+function calcStreak() {
+  if (!db.sessions.length) return 0;
+  const dates = [...new Set(db.sessions.map(s=>s.date))].sort().reverse();
+  let streak = 0;
+  let cur = new Date(today());
+  for (let d of dates) {
+    const day = new Date(d);
+    const diff = Math.round((cur - day)/86400000);
+    if (diff === 0 || diff === 1) { streak++; cur = day; }
+    else break;
+  }
+  return streak;
+}
+function recalcBest() {
+  db.best = 0;
+  db.sessions.forEach(s => s.hangs.forEach(h => { if (h > db.best) db.best = h; }));
+}
+function delHang(date, idx) {
+  const sess = getSession(date);
+  if (!sess) return;
+  sess.hangs.splice(idx, 1);
+  if (sess.hangs.length === 0) db.sessions = db.sessions.filter(s => s.date !== date);
+  recalcBest();
+  save(); render();
+}
+
+/* ── Timer ── */
+function toggleTimer() {
+  const btn = document.getElementById('btn-start');
+  if (running) {
+    clearInterval(iv); running = false;
+    btn.textContent = 'Resume';
+    btn.className = 'btn btn-primary';
+    document.getElementById('btn-log').style.display = '';
+    document.getElementById('timer').classList.remove('running');
+  } else {
+    running = true;
+    btn.textContent = 'Pause';
+    btn.className = 'btn btn-primary';
+    document.getElementById('btn-log').style.display = 'none';
+    document.getElementById('timer').classList.add('running');
+    iv = setInterval(() => { elapsed++; tickTimer(); }, 1000);
+  }
+}
+function tickTimer() {
+  const t = document.getElementById('timer');
+  t.textContent = fmt(elapsed);
+  if (running && db.best > 0 && elapsed > db.best) {
+    t.classList.add('pr'); t.classList.remove('running');
+    document.getElementById('pr-msg').textContent = '★ NEW PR IN PROGRESS';
+  } else {
+    document.getElementById('pr-msg').textContent = '';
+  }
+}
+function resetTimer() {
+  clearInterval(iv); running = false; elapsed = 0;
+  const t = document.getElementById('timer');
+  t.textContent = '0:00'; t.className = 'timer';
+  document.getElementById('btn-start').textContent = 'Start';
+  document.getElementById('btn-start').className = 'btn btn-primary';
+  document.getElementById('btn-log').style.display = 'none';
+  document.getElementById('pr-msg').textContent = '';
+}
+function logHang() {
+  if (elapsed < 1) return;
+  const d = getDate();
+  let sess = getSession(d);
+  if (!sess) { sess = { date: d, hangs: [] }; db.sessions.push(sess); }
+  sess.hangs.push(elapsed);
+  if (elapsed > db.best) db.best = elapsed;
+  save(); resetTimer(); render();
+}
+
+/* ── Render ── */
+function render() {
+  const d = getDate();
+  const sess = getSession(d);
+  const todayTotal = totalForDate(d);
+  const hangsToday = sess ? sess.hangs.length : 0;
+  const totalSess = db.sessions.reduce((a,s)=>a+s.hangs.length,0);
+  const streak = calcStreak();
+
+  document.getElementById('streak-val').textContent = streak;
+  document.getElementById('stat-today').textContent = fmt(todayTotal);
+  document.getElementById('stat-best').textContent = fmt(db.best||0);
+  document.getElementById('stat-sessions').textContent = totalSess;
+  document.getElementById('stat-hangs-today').textContent = hangsToday;
+
+  const pct = Math.min(100, Math.round((todayTotal/GOAL)*100));
+  document.getElementById('bar-fill').style.width = pct + '%';
+  document.getElementById('goal-pct').textContent = pct + '%';
+
+  // Today's hangs list
+  const hl = document.getElementById('hangs-list');
+  if (sess && sess.hangs.length) {
+    hl.innerHTML = sess.hangs.map((h,i) => `
+      <div class="hang-item">
+        <span class="hang-num">Hang ${i+1}</span>
+        <span class="hang-time">${fmt(h)}</span>
+        ${h === db.best ? '<span class="pr-tag">PR</span>' : ''}
+        <button class="del-btn" onclick="delHang('${d}',${i})" aria-label="Delete hang ${i+1}">×</button>
+      </div>`).join('');
+  } else {
+    hl.innerHTML = '<div class="empty">Tap start to time your first hang</div>';
+  }
+
+  // History
+  const sorted = [...db.sessions].sort((a,b)=>b.date.localeCompare(a.date));
+  const hiEl = document.getElementById('hist-list');
+  if (sorted.length) {
+    hiEl.innerHTML = sorted.map(s => {
+      const tot = s.hangs.reduce((a,b)=>a+b,0);
+      const best = Math.max(...s.hangs);
+      const metGoal = tot >= GOAL;
+      const label = new Date(s.date + 'T12:00:00').toLocaleDateString('en-AU', {
+        weekday: 'short', month: 'short', day: 'numeric'
+      });
+      return `
+      <div class="hist-item">
+        <div>
+          <div class="hist-date">${label}${metGoal ? '<span class="goal-dot" title="Goal met"></span>' : ''}</div>
+          <div class="hist-meta">${s.hangs.length} hang${s.hangs.length!==1?'s':''} · best ${fmt(best)}</div>
+        </div>
+        <div class="hist-right">
+          <div class="hist-total">${fmt(tot)}</div>
+          <div class="hist-best">${metGoal?'goal met':''+Math.round((tot/GOAL)*100)+'% of goal'}</div>
+        </div>
+      </div>`;
+    }).join('');
+  } else {
+    hiEl.innerHTML = '<div class="empty">No sessions yet — start hanging!</div>';
+  }
+}
+
+document.getElementById('log-date').addEventListener('change', render);
+
+// Init
+load();
+document.getElementById('log-date').value = today();
+render();
+</script>
+</body>
+</html>
